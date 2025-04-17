@@ -18,11 +18,12 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     if (idx >= numNodes) return;
 
     Node n = nodes[idx];
-    n.x += 100.0f * sinf(time);
-
+    n.x += 100.0f * sinf(time*(10.0+ 100.0/n.value)/10.0f);
+    n.y += 20.0f * cosf(time*(10.0+ 100.0/n.value)/10.0f);
+    
     float radius = n.value;
     float r2 = radius * radius;
-    float aaWidth = 1.1f;  // anti-aliasing transition zone
+    float aaWidth = 1.0f;  // anti-aliasing transition zone
 
     for (int u = -radius - aaWidth; u <= radius + aaWidth; u++) {
         for (int v = -radius - aaWidth; v <= radius + aaWidth; v++) {
@@ -45,15 +46,20 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
             }
 
             int pi = (y * width + x) * 4;
-
+            unsigned char a = (alpha * 255.0f);
             buffer[pi + 0] = (unsigned char)(255);
             buffer[pi + 1] = 0;
             buffer[pi + 2] = 0;
-            buffer[pi + 3] = (unsigned char)(alpha * 255.0f);
+            buffer[pi + 3] = (unsigned char) a;
         }
     }
 }
 
+
+__global__ void drawEdges(unsigned char* buffer, int width, int height, Edge *edges, int numEdges)
+{
+
+}
 
 // Check CUDA errors
 void checkCuda(cudaError_t err, const char* msg) {

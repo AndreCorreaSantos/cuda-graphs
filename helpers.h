@@ -9,9 +9,8 @@ typedef struct
 
 typedef struct
 {
-    int numNodes;
-    Node* nodes;
-} NodeArray;
+    int n1,n2;
+}Edge;
 
 // Structure to hold SDL2 objects
 struct SDL2Context {
