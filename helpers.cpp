@@ -94,3 +94,33 @@ Node* readNodes(const char* filePath, int *numNodes) {
     file.close();
     return nodes;
 }
+
+Edge* readEdges(const char* filePath, int *numEdges)
+{
+    std::ifstream file(filePath);
+    Edge* edges = nullptr;
+
+    if (!file) {
+        std::cerr << "Error opening edges file\n";
+        return nullptr;
+    }
+
+    std::string line;
+
+    // Read number of edges
+    std::getline(file, line);
+    int n_edges = std::stoi(line);
+    *numEdges = n_edges;
+    // Allocate memory
+    edges = new Edge[n_edges];
+
+    int index = 0;
+    while (std::getline(file, line) && index < n_edges) {
+        std::istringstream iss(line);
+        iss >> edges[index].n1 >> edges[index].n2 >> edges[index].strength;
+        index++;
+    }
+
+    file.close();
+    return edges; 
+}

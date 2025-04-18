@@ -10,6 +10,7 @@ typedef struct
 typedef struct
 {
     int n1,n2;
+    float strength;
 }Edge;
 
 // Structure to hold SDL2 objects
@@ -32,5 +33,7 @@ bool initCUDA(unsigned char** d_buffer, int width, int height);
 void cleanupCUDA(unsigned char* d_buffer);
 
 Node* readNodes(const char* filePath,int *numNodes);
+
+Edge* readEdges(const char* filePath, int *numEdges);
 
 #endif // HELPERS_H

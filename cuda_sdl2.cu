@@ -18,9 +18,10 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     if (idx >= numNodes) return;
 
     Node n = nodes[idx];
-    n.x += 100.0f * sinf(time*(10.0+ 100.0/n.value)/10.0f);
-    n.y += 20.0f * cosf(time*(10.0+ 100.0/n.value)/10.0f);
-    
+    n.x += sinf(time*(10.0+ 100.0/n.value)/10.0f);
+    n.y += cosf(time*(10.0+ 100.0/n.value)/10.0f);
+    nodes[idx] = n;
+
     float radius = n.value;
     float r2 = radius * radius;
     float aaWidth = 1.0f;  // anti-aliasing transition zone
@@ -56,10 +57,81 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
 }
 
 
-__global__ void drawEdges(unsigned char* buffer, int width, int height, Edge *edges, int numEdges)
-{
 
+
+__global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* edges, Node* nodes, int numEdges)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numEdges) return;
+
+    Edge e = edges[idx];
+    Node n1 = nodes[e.n1];
+    Node n2 = nodes[e.n2];
+
+    int x0 = static_cast<int>(n1.x);
+    int y0 = static_cast<int>(n1.y);
+    int x1 = static_cast<int>(n2.x);
+    int y1 = static_cast<int>(n2.y);
+
+    // Compute line thickness based on edge strength (1 to 5 pixels)
+    int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 1);
+
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+
+    while (true)
+    {
+        for (int ox = -thickness / 2; ox <= thickness / 2; ++ox)
+        {
+            for (int oy = -thickness / 2; oy <= thickness / 2; ++oy)
+            {
+                int px = x0 + ox;
+                int py = y0 + oy;
+
+                if (px >= 0 && px < width && py >= 0 && py < height)
+                {
+                    int i = (py * width + px) * 4;
+
+                    // Opacity modulated by edge strength and inverse distance
+                    float dist = sqrtf((dx * dx) + (dy * dy));
+                    float invDist = (dist > 0.0001f) ? (1.0f / dist) : 1.0f;
+                    float alpha = fminf(e.strength * invDist * 255.0f, 255.0f);
+                    unsigned char a = static_cast<unsigned char>(alpha);
+
+                    // Write color (white)
+                    buffer[i + 0] = 255;
+                    buffer[i + 1] = 255;
+                    buffer[i + 2] = 255;
+
+                    // Alpha blending (non-premultiplied)
+                    float existingAlpha = buffer[i + 3] / 255.0f;
+                    float newAlpha = a / 255.0f;
+                    float outAlpha = existingAlpha + newAlpha * (1.0f - existingAlpha);
+                    buffer[i + 3] = static_cast<unsigned char>(fminf(outAlpha * 255.0f, 255.0f));
+                }
+            }
+        }
+
+        if (x0 == x1 && y0 == y1) break;
+
+        int e2 = 2 * err;
+        if (e2 > -dy)
+        {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx)
+        {
+            err += dx;
+            y0 += sy;
+        }
+    }
 }
+
+
 
 // Check CUDA errors
 void checkCuda(cudaError_t err, const char* msg) {
@@ -104,11 +176,19 @@ int main() {
     int pixelY = HEIGHT / 2;
 
     int numNodes;
-    Node* h_nodes = readNodes("graph.txt",&numNodes);
+    Node* h_nodes = readNodes("nodes.txt",&numNodes);
     Node* d_nodes;
-
     cudaMalloc((void**)&d_nodes,sizeof(Node)*numNodes);
     cudaMemcpy(d_nodes, h_nodes, sizeof(Node)*numNodes,cudaMemcpyHostToDevice);
+
+
+    int numEdges;
+    Edge* h_edges = readEdges("edges.txt",&numEdges);
+    Edge* d_edges;
+    cudaMalloc((void**)&d_edges,sizeof(Node)*numEdges);
+    cudaMemcpy(d_edges, h_edges, sizeof(Node)*numEdges,cudaMemcpyHostToDevice);
+
+
 
     while (running) {
         // Handle events
@@ -132,6 +212,11 @@ int main() {
         checkCuda(cudaGetLastError(), "kernel launch");
         checkCuda(cudaDeviceSynchronize(), "kernel sync");
 
+        numBlocks = (numEdges + blockSize - 1 ) / blockSize;
+        drawEdges<<<numBlocks,blockSize>>>(d_buffer,WIDTH,HEIGHT,d_edges,d_nodes,numEdges);
+
+        checkCuda(cudaGetLastError(), "kernel launch");
+        checkCuda(cudaDeviceSynchronize(),"kernel sync");
         // Lock texture and copy CUDA buffer to texture
         void* pixels = nullptr;
         int pitch;
@@ -151,7 +236,9 @@ int main() {
 
     // Cleanup
     checkCuda(cudaFree(d_buffer), "cudaFree");
+    checkCuda(cudaFree(d_edges),"cudaFree");
     delete[] h_nodes;
+    delete[] h_edges;
     cleanupSDL2(sdlContext);
     return 0;
 }
