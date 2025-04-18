@@ -79,7 +79,6 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     int x1 = static_cast<int>(n2.x);
     int y1 = static_cast<int>(n2.y);
 
-    // Compute line thickness based on edge strength (1 to 5 pixels)
     int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 2);
 
     int dx = abs(x1 - x0);
@@ -103,9 +102,7 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
                 {
                     int i = (py * width + px) * 4;
 
-                    // Opacity modulated by edge strength and inverse distance
 
-                    // Write color (white)
                     buffer[i + 0] = 0;
                     buffer[i + 1] = 0;
                     buffer[i + 2] = (unsigned char) clamp((50000.0f / dist),0.0f,255.0f);
@@ -132,7 +129,6 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
 
 
 
-// Check CUDA errors
 void checkCuda(cudaError_t err, const char* msg) {
     if (err != cudaSuccess) {
         std::cerr << "CUDA Error: " << msg << " (" << cudaGetErrorString(err) << ")\n";
@@ -141,7 +137,7 @@ void checkCuda(cudaError_t err, const char* msg) {
 }
 
 bool initCUDA(unsigned char** d_buffer, int width, int height) {
-    // Allocate device buffer
+    // allocate device buffer
     cudaError_t err = cudaMalloc(d_buffer, width * height * 4);
     if (err != cudaSuccess) {
         std::cerr << "CUDA Error: cudaMalloc (" << cudaGetErrorString(err) << ")\n";
@@ -158,7 +154,7 @@ void cleanupCUDA(unsigned char* d_buffer) {
 
 
 int main() {
-    // Initialize SDL2 context
+    // init SDL2 context
     SDL2Context sdlContext = {nullptr, nullptr, nullptr};
     if (!initSDL2(sdlContext,WIDTH,HEIGHT)) {
         return -1;
@@ -168,7 +164,7 @@ int main() {
     unsigned char* d_buffer = nullptr;
     checkCuda(cudaMalloc(&d_buffer, WIDTH * HEIGHT * 4), "cudaMalloc");
 
-    // Main loop
+    // main loop
     bool running = true;
     SDL_Event event;
     int pixelX = WIDTH / 2;
@@ -200,7 +196,6 @@ int main() {
         // Clear device buffer
         checkCuda(cudaMemset(d_buffer, 0, WIDTH * HEIGHT * 4), "cudaMemset");
 
-        // Launch CUDA kernel to draw red pixel
         float t = SDL_GetTicks() / 1000.0f;  // time in seconds as float
 
         int blockSize = 256; // Good default
@@ -218,7 +213,7 @@ int main() {
 
         checkCuda(cudaGetLastError(), "kernel launch");
         checkCuda(cudaDeviceSynchronize(), "kernel sync");
-        // Lock texture and copy CUDA buffer to texture
+        // lock texture and copy CUDA buffer to texture
         void* pixels = nullptr;
         int pitch;
         if (SDL_LockTexture(sdlContext.texture, nullptr, &pixels, &pitch) != 0) {
@@ -229,13 +224,13 @@ int main() {
             SDL_UnlockTexture(sdlContext.texture);
         }
 
-        // Render
+        // sdl render
         SDL_RenderClear(sdlContext.renderer);
         SDL_RenderCopy(sdlContext.renderer, sdlContext.texture, nullptr, nullptr);
         SDL_RenderPresent(sdlContext.renderer);
     }
 
-    // Cleanup
+    // cleanup
     checkCuda(cudaFree(d_buffer), "cudaFree");
     checkCuda(cudaFree(d_edges),"cudaFree");
     delete[] h_nodes;
