@@ -18,8 +18,8 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     if (idx >= numNodes) return;
 
     Node n = nodes[idx];
-    n.x += sinf(time*(10.0+ 100.0/n.value)/10.0f);
-    n.y += cosf(time*(10.0+ 100.0/n.value)/10.0f);
+    n.x += sinf(time*(10.0+ 50.0/n.value)/10.0f);
+    n.y += cosf(time*(10.0+ 50.0/n.value)/10.0f);
     nodes[idx] = n;
 
     float radius = n.value;
@@ -56,9 +56,15 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     }
 }
 
+__device__ float lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
 
 
 
+__device__ float clamp(float a, float b, float c){
+    return min(max(a,b),c);
+}
 __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* edges, Node* nodes, int numEdges)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -74,7 +80,7 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     int y1 = static_cast<int>(n2.y);
 
     // Compute line thickness based on edge strength (1 to 5 pixels)
-    int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 1);
+    int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 2);
 
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
@@ -82,6 +88,8 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     int sy = (y0 < y1) ? 1 : -1;
     int err = dx - dy;
 
+    float dist = sqrtf((dx * dx) + (dy * dy));
+    if (dist > 500.0f) return;
     while (true)
     {
         for (int ox = -thickness / 2; ox <= thickness / 2; ++ox)
@@ -96,21 +104,12 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
                     int i = (py * width + px) * 4;
 
                     // Opacity modulated by edge strength and inverse distance
-                    float dist = sqrtf((dx * dx) + (dy * dy));
-                    float invDist = (dist > 0.0001f) ? (1.0f / dist) : 1.0f;
-                    float alpha = fminf(e.strength * invDist * 255.0f, 255.0f);
-                    unsigned char a = static_cast<unsigned char>(alpha);
 
                     // Write color (white)
-                    buffer[i + 0] = 255;
-                    buffer[i + 1] = 255;
-                    buffer[i + 2] = 255;
-
-                    // Alpha blending (non-premultiplied)
-                    float existingAlpha = buffer[i + 3] / 255.0f;
-                    float newAlpha = a / 255.0f;
-                    float outAlpha = existingAlpha + newAlpha * (1.0f - existingAlpha);
-                    buffer[i + 3] = static_cast<unsigned char>(fminf(outAlpha * 255.0f, 255.0f));
+                    buffer[i + 0] = 0;
+                    buffer[i + 1] = 0;
+                    buffer[i + 2] = (unsigned char) clamp((50000.0f / dist),0.0f,255.0f);
+                    buffer[i + 3] = 0;
                 }
             }
         }
@@ -207,16 +206,18 @@ int main() {
         int blockSize = 256; // Good default
         int numBlocks = (numNodes + blockSize - 1) / blockSize;
 
-        drawNodes<<<numBlocks, blockSize>>>(d_buffer, WIDTH, HEIGHT, d_nodes,numNodes,t );
-
-        checkCuda(cudaGetLastError(), "kernel launch");
-        checkCuda(cudaDeviceSynchronize(), "kernel sync");
+        
 
         numBlocks = (numEdges + blockSize - 1 ) / blockSize;
         drawEdges<<<numBlocks,blockSize>>>(d_buffer,WIDTH,HEIGHT,d_edges,d_nodes,numEdges);
 
         checkCuda(cudaGetLastError(), "kernel launch");
         checkCuda(cudaDeviceSynchronize(),"kernel sync");
+        
+        drawNodes<<<numBlocks, blockSize>>>(d_buffer, WIDTH, HEIGHT, d_nodes,numNodes,t );
+
+        checkCuda(cudaGetLastError(), "kernel launch");
+        checkCuda(cudaDeviceSynchronize(), "kernel sync");
         // Lock texture and copy CUDA buffer to texture
         void* pixels = nullptr;
         int pitch;
