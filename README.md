@@ -15,4 +15,3 @@ https://github.com/user-attachments/assets/3c354640-def6-492f-9913-df6601b9d2a7
 
   - Antialiasing lines.
   - MAKE NODES MOVABLE
-  - Understand everything.
