@@ -21,8 +21,8 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     if (idx >= numNodes) return;
 
     Node n = nodes[idx];
-    // n.x += sinf(time*(10.0+ 50.0/n.value)/10.0f);
-    // n.y += cosf(time*(10.0+ 50.0/n.value)/10.0f);
+    n.x += sinf(time*(10.0+ 50.0/n.value)/10.0f);
+    n.y += cosf(time*(10.0+ 50.0/n.value)/10.0f);
     nodes[idx] = n;
 
     float radius = n.value*pData->zoom;
@@ -81,8 +81,8 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     int y0 = static_cast<int>(n1.y * pData->zoom + pData->py);
     int x1 = static_cast<int>(n2.x * pData->zoom + pData->px);
     int y1 = static_cast<int>(n2.y * pData->zoom + pData->py);
-    
-    int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 2);
+
+    int thickness = static_cast<int>((e.strength * 4.0f) + 2)*pData->zoom;
 
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
@@ -231,8 +231,8 @@ int main() {
         // Clear device buffer
         checkCuda(cudaMemset(d_buffer, 0, WIDTH * HEIGHT * 4), "cudaMemset");
 
-        // float t = SDL_GetTicks() / 1000.0f;  // time in seconds as float
-        float t = 1.0;
+        float t = SDL_GetTicks() / 1000.0f;  // time in seconds as float
+        // float t = 1.0;
         int blockSize = 256; // Good default
         int numBlocks = (numNodes + blockSize - 1) / blockSize;
 

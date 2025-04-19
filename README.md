@@ -10,9 +10,9 @@ Current state: (Click on image for video).
 
 - ### Critical
 
-  - MOVE SCREEN RIGHT AND LEFT --> needs to record user pos and subtract it from edge pos. --> Update user pos with mouse movement.
-  - ZOOM IN AND ZOOM OUT --> weirder, maybe change both circle values and positions? Some transformation.
+  - CHANGE DRAW LOGIC --> MAKE IT SO THAT
 - ### Backlog
 
   - Antialiasing lines.
+  - MAKE NODES MOVABLE
   - Understand everything.
