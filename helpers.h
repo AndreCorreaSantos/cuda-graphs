@@ -2,6 +2,12 @@
 #define HELPERS_H
 
 #include <SDL2/SDL.h>
+
+typedef struct
+{
+    int px,py;
+} PlayerData;
+
 typedef struct
 {
     float x,y,value;

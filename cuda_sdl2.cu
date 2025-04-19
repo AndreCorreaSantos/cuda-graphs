@@ -1,6 +1,9 @@
 #include "helpers.h"
+#include <SDL2/SDL_events.h>
 #include <cmath>
 #include <cstdlib>
+#include <cuda_device_runtime_api.h>
+#include <driver_types.h>
 #include <iostream>
 #include <cuda_runtime.h>
 #include <time.h>
@@ -13,7 +16,7 @@
 
 
 
-__global__ void drawNodes(unsigned char* buffer, int width, int height, Node *nodes, int numNodes, float time) {
+__global__ void drawNodes(unsigned char* buffer, int width, int height, Node *nodes, int numNodes, float time, PlayerData* pData) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numNodes) return;
 
@@ -28,8 +31,8 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
 
     for (int u = -radius - aaWidth; u <= radius + aaWidth; u++) {
         for (int v = -radius - aaWidth; v <= radius + aaWidth; v++) {
-            int x = (int)(n.x + u);
-            int y = (int)(n.y + v);
+            int x = (int)(n.x + u + pData->px);
+            int y = (int)(n.y + v + pData->py);
 
             if (x < 0 || x >= width || y < 0 || y >= height) continue;
 
@@ -65,7 +68,7 @@ __device__ float lerp(float a, float b, float t) {
 __device__ float clamp(float a, float b, float c){
     return min(max(a,b),c);
 }
-__global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* edges, Node* nodes, int numEdges)
+__global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* edges, Node* nodes, int numEdges, PlayerData *pData)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numEdges) return;
@@ -74,10 +77,10 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     Node n1 = nodes[e.n1];
     Node n2 = nodes[e.n2];
 
-    int x0 = static_cast<int>(n1.x);
-    int y0 = static_cast<int>(n1.y);
-    int x1 = static_cast<int>(n2.x);
-    int y1 = static_cast<int>(n2.y);
+    int x0 = static_cast<int>(n1.x + pData->px);
+    int y0 = static_cast<int>(n1.y + pData->py);
+    int x1 = static_cast<int>(n2.x + pData->px);
+    int y1 = static_cast<int>(n2.y + pData->py);
 
     int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 2);
 
@@ -166,6 +169,7 @@ int main() {
 
     // main loop
     bool running = true;
+    bool mouseDown = false;
     SDL_Event event;
     int pixelX = WIDTH / 2;
     int pixelY = HEIGHT / 2;
@@ -183,16 +187,34 @@ int main() {
     cudaMalloc((void**)&d_edges,sizeof(Node)*numEdges);
     cudaMemcpy(d_edges, h_edges, sizeof(Node)*numEdges,cudaMemcpyHostToDevice);
 
+    PlayerData pData = {0,0}; 
 
+    PlayerData *h_pData = &pData;
+    PlayerData *d_pData;
+
+    cudaMalloc((void**) &d_pData,sizeof(PlayerData)); // maybe will have to move this logic to inside the game loop, so that d_pdata gets updated? or does it get set auto?
+    cudaMemcpy(d_pData,h_pData,sizeof(PlayerData),cudaMemcpyHostToDevice);
 
     while (running) {
         // Handle events
         while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_MOUSEBUTTONDOWN)
+            {
+                mouseDown = true;
+            }
+            if (event.type == SDL_MOUSEBUTTONUP)
+            {
+                mouseDown = false;
+            }
+            if (event.type == SDL_MOUSEMOTION && mouseDown) {
+                pData.px += event.motion.xrel;
+                pData.py += event.motion.yrel;
+            }
             if (event.type == SDL_QUIT) {
                 running = false;
             }
         }
-
+        cudaMemcpy(d_pData, &pData, sizeof(PlayerData), cudaMemcpyHostToDevice); // updating player data after events
         // Clear device buffer
         checkCuda(cudaMemset(d_buffer, 0, WIDTH * HEIGHT * 4), "cudaMemset");
 
@@ -204,12 +226,12 @@ int main() {
         
 
         numBlocks = (numEdges + blockSize - 1 ) / blockSize;
-        drawEdges<<<numBlocks,blockSize>>>(d_buffer,WIDTH,HEIGHT,d_edges,d_nodes,numEdges);
+        drawEdges<<<numBlocks,blockSize>>>(d_buffer,WIDTH,HEIGHT,d_edges,d_nodes,numEdges,d_pData);
 
         checkCuda(cudaGetLastError(), "kernel launch");
         checkCuda(cudaDeviceSynchronize(),"kernel sync");
         
-        drawNodes<<<numBlocks, blockSize>>>(d_buffer, WIDTH, HEIGHT, d_nodes,numNodes,t );
+        drawNodes<<<numBlocks, blockSize>>>(d_buffer, WIDTH, HEIGHT, d_nodes,numNodes,t ,d_pData);
 
         checkCuda(cudaGetLastError(), "kernel launch");
         checkCuda(cudaDeviceSynchronize(), "kernel sync");
