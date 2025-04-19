@@ -6,6 +6,7 @@
 typedef struct
 {
     int px,py;
+    float zoom;
 } PlayerData;
 
 typedef struct

@@ -21,18 +21,18 @@ __global__ void drawNodes(unsigned char* buffer, int width, int height, Node *no
     if (idx >= numNodes) return;
 
     Node n = nodes[idx];
-    n.x += sinf(time*(10.0+ 50.0/n.value)/10.0f);
-    n.y += cosf(time*(10.0+ 50.0/n.value)/10.0f);
+    // n.x += sinf(time*(10.0+ 50.0/n.value)/10.0f);
+    // n.y += cosf(time*(10.0+ 50.0/n.value)/10.0f);
     nodes[idx] = n;
 
-    float radius = n.value;
+    float radius = n.value*pData->zoom;
     float r2 = radius * radius;
     float aaWidth = 1.0f;  // anti-aliasing transition zone
 
     for (int u = -radius - aaWidth; u <= radius + aaWidth; u++) {
         for (int v = -radius - aaWidth; v <= radius + aaWidth; v++) {
-            int x = (int)(n.x + u + pData->px);
-            int y = (int)(n.y + v + pData->py);
+            int x = (int)(n.x*pData->zoom + u + pData->px);
+            int y = (int)(n.y*pData->zoom + v + pData->py);
 
             if (x < 0 || x >= width || y < 0 || y >= height) continue;
 
@@ -77,11 +77,11 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
     Node n1 = nodes[e.n1];
     Node n2 = nodes[e.n2];
 
-    int x0 = static_cast<int>(n1.x + pData->px);
-    int y0 = static_cast<int>(n1.y + pData->py);
-    int x1 = static_cast<int>(n2.x + pData->px);
-    int y1 = static_cast<int>(n2.y + pData->py);
-
+    int x0 = static_cast<int>(n1.x * pData->zoom + pData->px);
+    int y0 = static_cast<int>(n1.y * pData->zoom + pData->py);
+    int x1 = static_cast<int>(n2.x * pData->zoom + pData->px);
+    int y1 = static_cast<int>(n2.y * pData->zoom + pData->py);
+    
     int thickness = max(1, static_cast<int>(e.strength * 4.0f) + 2);
 
     int dx = abs(x1 - x0);
@@ -104,7 +104,6 @@ __global__ void drawEdges(unsigned char* buffer, int width, int height, Edge* ed
                 if (px >= 0 && px < width && py >= 0 && py < height)
                 {
                     int i = (py * width + px) * 4;
-
 
                     buffer[i + 0] = 0;
                     buffer[i + 1] = 0;
@@ -187,7 +186,7 @@ int main() {
     cudaMalloc((void**)&d_edges,sizeof(Node)*numEdges);
     cudaMemcpy(d_edges, h_edges, sizeof(Node)*numEdges,cudaMemcpyHostToDevice);
 
-    PlayerData pData = {0,0}; 
+    PlayerData pData = {0,0, 1.0}; 
 
     PlayerData *h_pData = &pData;
     PlayerData *d_pData;
@@ -210,16 +209,30 @@ int main() {
                 pData.px += event.motion.xrel;
                 pData.py += event.motion.yrel;
             }
+            if (event.type == SDL_MOUSEWHEEL) {
+                float sensitivity = 0.1f;
+                float oldZoom = pData.zoom;
+                
+                // Multiplicative zoom (better than additive)
+                pData.zoom *= (1.0f + event.wheel.y * sensitivity);
+                
+                pData.zoom = fmax(0.1f, fmin(10.0f, pData.zoom));
+                
+                // Adjust pan to zoom from screen center
+                pData.px = (WIDTH/2.0f) - ((WIDTH/2.0f - pData.px) * pData.zoom / oldZoom);
+                pData.py = (HEIGHT/2.0f) - ((HEIGHT/2.0f - pData.py) * pData.zoom / oldZoom);
+            }
             if (event.type == SDL_QUIT) {
                 running = false;
             }
+
         }
         cudaMemcpy(d_pData, &pData, sizeof(PlayerData), cudaMemcpyHostToDevice); // updating player data after events
         // Clear device buffer
         checkCuda(cudaMemset(d_buffer, 0, WIDTH * HEIGHT * 4), "cudaMemset");
 
-        float t = SDL_GetTicks() / 1000.0f;  // time in seconds as float
-
+        // float t = SDL_GetTicks() / 1000.0f;  // time in seconds as float
+        float t = 1.0;
         int blockSize = 256; // Good default
         int numBlocks = (numNodes + blockSize - 1) / blockSize;
 
